@@ -23,7 +23,7 @@ const ALLOWED_ORIGINS = (process.env.CLIENT_ORIGIN || "")
   .filter(Boolean);
 
 const ALL_ORIGINS = [
-  ...new Set([...ALLOWED_ORIGINS, "http://localhost:3001", "http://localhost:5173"]),
+  ...new Set([...ALLOWED_ORIGINS, "https://stockpulse-uaff.onrender.com", "https://stockpulse-uaff.onrender.com"]),
 ];
 
 const io = new Server(server, {

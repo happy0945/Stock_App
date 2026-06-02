@@ -27,7 +27,7 @@ const ALLOWED_ORIGINS = (process.env.CLIENT_ORIGIN || "")
   .map((o) => o.trim())
   .filter(Boolean);
 
-const DEV_ORIGINS = ["http://localhost:3001", "http://localhost:5173"];
+const DEV_ORIGINS = ["https://stockpulse-uaff.onrender.com", "https://stockpulse-uaff.onrender.com"];
 const ALL_ORIGINS  = [...new Set([...ALLOWED_ORIGINS, ...DEV_ORIGINS])];
 
 const corsOptions = {
