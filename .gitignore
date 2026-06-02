@@ -5,5 +5,5 @@ logs/
 .DS_Store
 dist/
 coverage/
-src/config/serviceAccountKey.jsonsrc/config/serviceAccountKey.json 
-src/config/serviceAccountKey.json
+
+
