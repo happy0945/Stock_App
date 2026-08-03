@@ -1,53 +1,152 @@
 /**
  * backend/controllers/authController.js
- * Handles Google OAuth token exchange, profile fetch, and profile update.
+ * Handles manual (Email/Password with JWT & bcrypt) registration & login,
+ * Google OAuth token verification, profile fetch, and profile update.
  */
 
-const jwt   = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 const admin = require("../config/firebase");
-const User  = require("../models/User");
+const User = require("../models/User");
 
-const JWT_SECRET  = process.env.JWT_SECRET  || "change_me_in_production";
+const JWT_SECRET = process.env.JWT_SECRET || "stockpulse_jwt_secret_key_2026_super_secure";
 const JWT_EXPIRES = process.env.JWT_EXPIRES || "7d";
 
-/** Sign a short-lived app JWT containing the Firebase UID */
+/** Sign a JWT containing the user's UID */
 const signToken = (uid) =>
   jwt.sign({ uid }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 
+// ── POST /api/auth/register ───────────────────────────────────────────────────
+/** Manual email + password registration with bcrypt */
+const registerLocal = async (req, res) => {
+  try {
+    const { email, password, displayName } = req.body || {};
+
+    if (!email || !password) {
+      return res.status(400).json({
+        error: { message: "Email and password are required." },
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        error: { message: "Password must be at least 6 characters long." },
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const existing = await User.findOne({ email: cleanEmail });
+
+    if (existing) {
+      return res.status(400).json({
+        error: { message: "An account with this email already exists." },
+      });
+    }
+
+    // Generate unique local UID
+    const uid = `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    const user = new User({
+      uid,
+      email: cleanEmail,
+      password,
+      displayName: displayName ? displayName.trim() : cleanEmail.split("@")[0],
+      authProvider: "local",
+      lastLoginAt: new Date(),
+    });
+
+    await user.save();
+
+    const token = signToken(user.uid);
+
+    return res.status(201).json({
+      success: true,
+      token,
+      user: sanitizeUser(user),
+    });
+  } catch (err) {
+    console.error("[registerLocal]", err.message);
+    return res.status(500).json({
+      error: { message: "Registration failed. " + err.message },
+    });
+  }
+};
+
+// ── POST /api/auth/login ──────────────────────────────────────────────────────
+/** Manual email + password login using bcrypt */
+const loginLocal = async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res.status(400).json({
+        error: { message: "Email and password are required." },
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail }).select("+password");
+
+    if (!user) {
+      return res.status(401).json({
+        error: { message: "Invalid email or password." },
+      });
+    }
+
+    // Compare bcrypt password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({
+        error: { message: "Invalid email or password." },
+      });
+    }
+
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    const token = signToken(user.uid);
+
+    return res.status(200).json({
+      success: true,
+      token,
+      user: sanitizeUser(user),
+    });
+  } catch (err) {
+    console.error("[loginLocal]", err.message);
+    return res.status(500).json({
+      error: { message: "Login failed. " + err.message },
+    });
+  }
+};
+
 // ── POST /api/auth/google ─────────────────────────────────────────────────────
-/**
- * Accepts a Firebase ID token, verifies it server-side, then upserts the
- * user document in MongoDB and returns an app-level JWT.
- */
+/** Accepts a Firebase ID token, verifies server-side, upserts user */
 const googleAuth = async (req, res) => {
-  const { idToken } = req.body;
+  const { idToken } = req.body || {};
   if (!idToken) {
     return res.status(400).json({ error: { message: "idToken is required." } });
   }
 
   try {
-    // 1. Verify the Firebase ID token
     const decoded = await admin.auth().verifyIdToken(idToken);
     const { uid, email, name, picture } = decoded;
 
-    // 2. Upsert the user in MongoDB
     const user = await User.findOneAndUpdate(
-      { uid },
+      { email: email ? email.toLowerCase() : `${uid}@google.com` },
       {
         $set: {
-          email:       email  || "",
-          displayName: name   || "",
-          photoURL:    picture|| "",
+          uid,
+          email: email ? email.toLowerCase() : `${uid}@google.com`,
+          displayName: name || "",
+          photoURL: picture || "",
+          authProvider: "google",
           lastLoginAt: new Date(),
         },
-        $setOnInsert: { uid }, // ensures uid is set on new docs
+        $setOnInsert: { uid },
       },
       { upsert: true, new: true, runValidators: true }
     );
 
-    console.log(req.body)
-    // 3. Issue app JWT
-    const token = signToken(uid);
+    const token = signToken(user.uid);
 
     return res.status(200).json({
       token,
@@ -62,30 +161,20 @@ const googleAuth = async (req, res) => {
 };
 
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────
-/** Returns the currently authenticated user's MongoDB profile. */
 const getMe = async (req, res) => {
   return res.status(200).json({ user: sanitizeUser(req.user) });
 };
 
 // ── PUT /api/auth/profile ─────────────────────────────────────────────────────
-/** Updates editable profile fields for the authenticated user. */
 const updateProfile = async (req, res) => {
   const ALLOWED_FIELDS = ["displayName", "bio", "phone", "location", "website"];
 
-  // Pick only the allowed fields from the request body
   const updates = {};
   for (const field of ALLOWED_FIELDS) {
-    console.log(req.body)
-    console.log(updates)
     if (req.body[field] !== undefined) {
-      console.log(req.body)
-      console.log(updates)
-
       updates[field] = String(req.body[field]).trim();
     }
   }
-  console.log(req.body)
-  console.log(updates)
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: { message: "No valid fields to update." } });
@@ -105,20 +194,26 @@ const updateProfile = async (req, res) => {
 };
 
 // ── Helper ────────────────────────────────────────────────────────────────────
-/** Strip sensitive / internal fields before sending to the client */
 const sanitizeUser = (user) => ({
-  uid:         user.uid,
-  email:       user.email,
+  uid: user.uid,
+  email: user.email,
   displayName: user.displayName,
-  photoURL:    user.photoURL,
-  bio:         user.bio,
-  phone:       user.phone,
-  location:    user.location,
-  website:     user.website,
-  role:        user.role,
-  watchlist:   user.watchlist,
-  createdAt:   user.createdAt,
+  photoURL: user.photoURL,
+  authProvider: user.authProvider,
+  bio: user.bio,
+  phone: user.phone,
+  location: user.location,
+  website: user.website,
+  role: user.role,
+  watchlist: user.watchlist,
+  createdAt: user.createdAt,
   lastLoginAt: user.lastLoginAt,
 });
 
-module.exports = { googleAuth, getMe, updateProfile };
+module.exports = {
+  registerLocal,
+  loginLocal,
+  googleAuth,
+  getMe,
+  updateProfile,
+};

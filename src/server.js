@@ -8,6 +8,8 @@ const { Server } = require("socket.io");
 const app    = require("./app");           // ← Express app (fully configured)
 const logger = require("./utils/logger");
 
+const { initFinnhubSocket } = require("./sockets/stockSocket");
+
 const PORT = process.env.PORT || 5000;
 
 // ── 1. Create ONE http.Server from the Express app ────────────────────────────
@@ -22,13 +24,26 @@ const ALLOWED_ORIGINS = (process.env.CLIENT_ORIGIN || "")
   .map((o) => o.trim())
   .filter(Boolean);
 
+const DEV_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5000",
+  "http://127.0.0.1:5000",
+];
+
 const ALL_ORIGINS = [
-  ...new Set([...ALLOWED_ORIGINS, "https://stockpulse-uaff.onrender.com", "https://stockpulse-uaff.onrender.com"]),
+  ...new Set([...ALLOWED_ORIGINS, ...DEV_ORIGINS, "https://stockpulse-uaff.onrender.com"]),
 ];
 
 const io = new Server(server, {
   cors: {
-    origin:      ALL_ORIGINS,
+    origin: (incomingOrigin, callback) => {
+      if (!incomingOrigin) return callback(null, true);
+      if (ALL_ORIGINS.includes(incomingOrigin) || incomingOrigin.includes("localhost") || incomingOrigin.includes("127.0.0.1")) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Allow all during dev for WS upgrade
+    },
     methods:     ["GET", "POST"],
     credentials: true,
   },
@@ -39,30 +54,16 @@ const io = new Server(server, {
 // Make `io` accessible inside Express routes/controllers via req.app.get("io")
 app.set("io", io);
 
-// ── 3. Socket.IO connection handler ───────────────────────────────────────────
-io.on("connection", (socket) => {
-  logger.info(`[Socket] Client connected: ${socket.id}`);
-
-  socket.on("subscribe", (symbol) => {
-    socket.join(symbol);
-    logger.debug(`[Socket] ${socket.id} subscribed to ${symbol}`);
-  });
-
-  socket.on("unsubscribe", (symbol) => {
-    socket.leave(symbol);
-    logger.debug(`[Socket] ${socket.id} unsubscribed from ${symbol}`);
-  });
-
-  socket.on("disconnect", (reason) => {
-    logger.info(`[Socket] Client disconnected: ${socket.id} (${reason})`);
-  });
-});
+// ── 3. Initialize Finnhub WebSocket Manager & wire up Socket.IO events ──────
+const finnhubManager = initFinnhubSocket(io);
+app.locals.finnhubManager = finnhubManager;
 
 // ── 4. Connect to MongoDB, then start the server ──────────────────────────────
+const dbName = process.env.DB_NAME || "stockdb";
 mongoose
-  .connect(process.env.MONGODB_URI)
+  .connect(process.env.MONGODB_URI, { dbName })
   .then(() => {
-    logger.info("✅  MongoDB connected");
+    logger.info(`✅  MongoDB connected to database: ${dbName}`);
 
     server.listen(PORT, () => {
       logger.info(`🚀  StockPulse API   → http://localhost:${PORT}`);

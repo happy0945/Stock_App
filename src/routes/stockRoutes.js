@@ -23,6 +23,8 @@ const {
   subscribeSymbol,
   unsubscribeSymbol,
   healthCheck,
+  getAiPrediction,
+  getMarketNews,
 } = require("../controllers/stockController");
 const { stockLimiter } = require("../middleware/rateLimiter");
 
@@ -33,6 +35,8 @@ router.get("/health", healthCheck);
 router.get("/subscriptions", getSubscriptions);
 router.post("/subscribe", subscribeSymbol);
 router.delete("/subscribe", unsubscribeSymbol);
+router.get("/ai-prediction", getAiPrediction);
+router.get("/news", getMarketNews);
 
 // ── Data routes (rate-limited) ────────────────────────────────────────────────
 router.get("/multiple", stockLimiter, getMultipleStockQuotes);

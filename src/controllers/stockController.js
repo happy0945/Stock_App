@@ -214,6 +214,51 @@ const healthCheck = (req, res) => {
   });
 };
 
+
+// ── GET /api/stocks/ai-prediction?symbol=AAPL ─────────────────────────────
+
+/**
+ * Fetch AI Stock Price Prediction & LLM Analysis for a symbol.
+ */
+const getAiPrediction = async (req, res, next) => {
+  try {
+    const { symbol } = req.query;
+    if (!symbol) {
+      const err = new Error('Query parameter "symbol" is required.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const aiService = require("../services/aiService");
+    const prediction = await aiService.getAiPrediction(symbol);
+
+    return res.status(200).json({
+      success: true,
+      data: prediction,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── GET /api/stocks/news ──────────────────────────────────────────────────────
+
+/**
+ * Fetch real-time general market news from Finnhub.
+ */
+const getMarketNews = async (req, res, next) => {
+  try {
+    const category = req.query.category || "general";
+    const news = await stockService.getMarketNews(category);
+    return res.status(200).json({
+      success: true,
+      data: news,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getStockQuote,
   getMultipleStockQuotes,
@@ -221,4 +266,6 @@ module.exports = {
   subscribeSymbol,
   unsubscribeSymbol,
   healthCheck,
+  getAiPrediction,
+  getMarketNews,
 };

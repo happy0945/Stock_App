@@ -27,14 +27,22 @@ const ALLOWED_ORIGINS = (process.env.CLIENT_ORIGIN || "")
   .map((o) => o.trim())
   .filter(Boolean);
 
-const DEV_ORIGINS = ["https://stockpulse-uaff.onrender.com", "https://stockpulse-uaff.onrender.com"];
+const DEV_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5000",
+  "http://127.0.0.1:5000",
+  "https://stockpulse-uaff.onrender.com"
+];
 const ALL_ORIGINS  = [...new Set([...ALLOWED_ORIGINS, ...DEV_ORIGINS])];
 
 const corsOptions = {
   origin: (incomingOrigin, callback) => {
     // Allow Postman / curl / server-to-server (no Origin header)
     if (!incomingOrigin) return callback(null, true);
-    if (ALL_ORIGINS.includes(incomingOrigin)) return callback(null, true);
+    if (ALL_ORIGINS.includes(incomingOrigin) || incomingOrigin.includes("localhost") || incomingOrigin.includes("127.0.0.1")) {
+      return callback(null, true);
+    }
     logger.warn(`CORS blocked origin: ${incomingOrigin}`);
     return callback(new Error(`CORS: origin ${incomingOrigin} not allowed`));
   },

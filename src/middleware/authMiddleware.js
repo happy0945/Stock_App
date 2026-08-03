@@ -6,7 +6,7 @@
 const jwt   = require("jsonwebtoken");
 const User  = require("../models/User");
 
-const JWT_SECRET = process.env.JWT_SECRET || "change_me_in_production";
+const JWT_SECRET = process.env.JWT_SECRET || "stockpulse_jwt_secret_key_2026_super_secure";
 
 /**
  * requireAuth — attach req.user (MongoDB doc) or return 401.

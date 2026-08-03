@@ -4,16 +4,24 @@
  */
 
 const express = require("express");
-const router  = express.Router();
+const router = express.Router();
 
-const { googleAuth, getMe, updateProfile } = require("../controllers/authController");
+const {
+  registerLocal,
+  loginLocal,
+  googleAuth,
+  getMe,
+  updateProfile,
+} = require("../controllers/authController");
 const { requireAuth } = require("../middleware/authMiddleware");
 
-// Public — exchange Firebase ID token for app JWT
+// Public authentication routes
+router.post("/register", registerLocal);
+router.post("/login", loginLocal);
 router.post("/google", googleAuth);
 
-// Protected — require valid app JWT
-router.get ("/me",      requireAuth, getMe);
-router.put ("/profile", requireAuth, updateProfile);
+// Protected user routes
+router.get("/me", requireAuth, getMe);
+router.put("/profile", requireAuth, updateProfile);
 
 module.exports = router;

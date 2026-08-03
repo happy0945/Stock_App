@@ -196,9 +196,44 @@ const bustCache = (symbol) => {
   cache.del(key);
 };
 
+/**
+ * Fetch real-time market news from Finnhub API.
+ */
+const getMarketNews = async (category = "general") => {
+  const cacheKey = `news:${category}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const { data } = await finnhubRest.get("/news", {
+      params: { category },
+    });
+
+    const newsList = Array.isArray(data)
+      ? data.slice(0, 12).map((item) => ({
+          id: item.id || item.url,
+          headline: item.headline,
+          summary: item.summary,
+          source: item.source,
+          url: item.url,
+          image: item.image || "",
+          category: item.category,
+          datetime: item.datetime ? new Date(item.datetime * 1000).toISOString() : new Date().toISOString(),
+        }))
+      : [];
+
+    cache.set(cacheKey, newsList, 300); // cache for 5 min
+    return newsList;
+  } catch (err) {
+    logger.warn(`[StockService] Failed to fetch market news: ${err.message}`);
+    return [];
+  }
+};
+
 module.exports = {
   getStockQuote,
   getMultipleStockQuotes,
   getCacheStats,
   bustCache,
+  getMarketNews,
 };
